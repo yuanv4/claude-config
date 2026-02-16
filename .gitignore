@@ -1,0 +1,18 @@
+# 本地敏感配置（含密钥）
+settings.local.json
+
+# OS 杂项
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# 编辑器/IDE
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# 备份文件
+*.bak
+.backup/
