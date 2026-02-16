@@ -1,13 +1,13 @@
 # claude-config
 
-我的 Claude Code 配置同步仓库。
+我的 Claude/Codex 配置同步仓库。
 
 ## 快速开始
 
 ```powershell
 git clone https://github.com/yuanv4/claude-config.git
 cd claude-config
-.\install.ps1
+.\sync.ps1 sync
 ```
 
 ## 目录结构
@@ -20,38 +20,22 @@ claude-config/
 ├── rules/             # 规则文件
 ├── agents/            # 子代理定义
 ├── tests/             # Bats 测试
-├── install.ps1        # 安装脚本（创建软链接）
-└── sync.ps1           # 同步脚本（管理仓库与本地差异）
+└── sync.ps1           # 同步脚本（拉取、对齐 ~/.claude 和 ~/.codex、提交、推送）
 ```
 
 ## 配置管理
 
 ```powershell
-# 查看同步状态
+# 完整同步：拉取远程 -> 对齐 ~/.claude + ~/.codex -> 提交并推送（如有变更）
+.\sync.ps1 sync
+
+# 不带参数等同于 sync
 .\sync.ps1
-
-# 预览安装效果
-.\install.ps1 --dry-run
-
-# 添加本地 skill 到仓库
-.\sync.ps1 add skill my-skill
-.\sync.ps1 push
-
-# 添加本地 command 到仓库
-.\sync.ps1 add command my-command
-.\sync.ps1 push
-
-# 从仓库移除 skill（保留本地副本）
-.\sync.ps1 remove skill my-skill
-.\sync.ps1 push
-
-# 从仓库移除 command（保留本地副本）
-.\sync.ps1 remove command my-command
-.\sync.ps1 push
-
-# 拉取远程更改
-.\sync.ps1 pull
 ```
+
+> 注意：脚本会对齐 `skills/agents/rules/commands`，并保留 `~/.codex/skills/.system`。
+
+> 扩展方式：在 `sync.ps1` 顶部修改 `$ManagedSyncRules`（同步哪些目录）和 `$SyncTargets`（同步到哪些根目录）。
 
 ## 敏感信息
 

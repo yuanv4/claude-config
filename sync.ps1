@@ -1,11 +1,52 @@
 #!/usr/bin/env pwsh
-# Claude Code 配置同步脚本（精简版）
-# 用法: .\sync.ps1 [命令] [类型] [名称]
+# Claude/Codex 配置同步脚本（仓库完全同步版）
+# 用法: .\sync.ps1 [sync|--help]
 
 $ErrorActionPreference = "Stop"
 
 $ConfigDir = $PSScriptRoot
-$ClaudeDir = Join-Path $HOME ".claude"
+
+# Central sync rules: add/remove entries here to control what gets synced.
+$ManagedSyncRules = @(
+  @{ RepoPath = "skills";   TargetPath = "skills";   Kind = "dir"  }
+  @{ RepoPath = "agents";   TargetPath = "agents";   Kind = "file" }
+  @{ RepoPath = "rules";    TargetPath = "rules";    Kind = "file" }
+  @{ RepoPath = "commands"; TargetPath = "commands"; Kind = "file" }
+)
+
+$OptionalFiles = @("settings.json", "statusline.sh")
+
+# Target profiles: add/remove profiles here.
+$SyncTargets = @(
+  @{
+    Name = "claude"
+    RootDir = (Join-Path $HOME ".claude")
+    SyncOptionalFiles = $true
+    ProtectedNames = @{
+      skills = @()
+    }
+  }
+  @{
+    Name = "codex"
+    RootDir = (Join-Path $HOME ".codex")
+    SyncOptionalFiles = $false
+    ProtectedNames = @{
+      skills = @(".system")
+    }
+  }
+)
+
+function Show-Help {
+  Write-Host "Claude/Codex 配置同步（仓库完全同步版）"
+  Write-Host "======================================"
+  Write-Host ""
+  Write-Host "用法:"
+  Write-Host "  .\sync.ps1 sync    拉取远程、对齐 ~/.claude 和 ~/.codex、提交并推送"
+  Write-Host "  .\sync.ps1         默认执行 sync"
+  Write-Host ""
+  Write-Host "说明:"
+  Write-Host "  同步规则可在脚本顶部的 `$ManagedSyncRules / `$SyncTargets 中增删。"
+}
 
 function Test-IsLink {
   param([string]$Path)
@@ -33,233 +74,202 @@ function Get-LinkTarget {
     $base = Split-Path -Parent $Path
     $candidate = Join-Path $base $target
     $resolved = Resolve-Path -LiteralPath $candidate -ErrorAction SilentlyContinue
-    return $resolved.Path ?? $candidate
+    if ($resolved) {
+      return $resolved.Path
+    }
+    return $candidate
   } catch {
     return $null
   }
 }
 
-function Show-Help {
-  Write-Host "Claude 配置同步（精简版）"
-  Write-Host "========================"
-  Write-Host ""
-  Write-Host "用法:"
-  Write-Host "  .\sync.ps1 add <类型> <名称>    添加本地项到仓库"
-  Write-Host "  .\sync.ps1 remove <类型> <名称> 从仓库移除（保留本地）"
-  Write-Host "  .\sync.ps1 pull                 拉取并重新安装"
-  Write-Host "  .\sync.ps1 push                 提交并推送更改"
-  Write-Host ""
-  Write-Host "类型: skill, agent, rule, command"
-}
-
-function Assert-EnvironmentReady {
+function Ensure-SymbolicLink {
   param(
-    [string]$Command,
-    [string]$Type
+    [string]$Src,
+    [string]$Dest,
+    [string]$ItemName
   )
 
-  if ($Command -in @("add", "remove", "pull")) {
-    if (-not (Test-Path -LiteralPath $ClaudeDir -PathType Container)) {
-      Write-Host "错误: 未检测到 Claude 配置目录: $ClaudeDir"
-      Write-Host "请先执行 .\install.ps1 初始化环境。"
-      exit 1
-    }
-  }
+  $resolvedSrc = (Resolve-Path -LiteralPath $Src).Path
 
-  if ($Command -in @("add", "remove")) {
-    $subDir = switch ($Type) {
-      "skill" { "skills" }
-      "agent" { "agents" }
-      "rule" { "rules" }
-      "command" { "commands" }
-      default { $null }
-    }
-
-    if ($subDir) {
-      $targetDir = Join-Path $ClaudeDir $subDir
-      if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
-        Write-Host "错误: 未检测到目录: $targetDir"
-        Write-Host "请先执行 .\install.ps1 初始化环境，或手动创建该目录。"
-        exit 1
+  if (Test-IsLink $Dest) {
+    $target = Get-LinkTarget $Dest
+    if ($target) {
+      $resolvedTarget = Resolve-Path -LiteralPath $target -ErrorAction SilentlyContinue
+      if ($resolvedTarget -and $resolvedTarget.Path -eq $resolvedSrc) {
+        Write-Host "OK $ItemName" -ForegroundColor DarkGray
+        return
       }
     }
   }
-}
 
-function Add-Skill {
-  param([string]$Name)
-  $src = Join-Path $HOME ".claude\skills\$Name"
-  $dest = Join-Path $ConfigDir "skills\$Name"
-
-  if (-not (Test-Path -LiteralPath $src -PathType Container)) {
-    Write-Host "错误: Skill 不存在于 $src"
-    exit 1
+  if (Test-Path -LiteralPath $Dest) {
+    Remove-Item -LiteralPath $Dest -Force -Recurse
   }
 
-  if (Test-IsLink $src) {
-    $target = Get-LinkTarget $src
-    if ($target -and $target.StartsWith($ConfigDir, [System.StringComparison]::OrdinalIgnoreCase)) {
-      Write-Host "错误: '$Name' 已经在同步中"
-      exit 1
-    }
+  $destParent = Split-Path -Parent $Dest
+  if ($destParent) {
+    New-Item -ItemType Directory -Path $destParent -Force | Out-Null
   }
 
-  Write-Host "正在将 skill '$Name' 添加到仓库..."
-  New-Item -ItemType Directory -Path (Join-Path $ConfigDir "skills") -Force | Out-Null
-  Copy-Item -LiteralPath $src -Destination $dest -Recurse -Force
-  Remove-Item -LiteralPath $src -Recurse -Force
-  New-Item -ItemType SymbolicLink -Path $src -Target $dest -Force | Out-Null
-  Write-Host "✓ Skill '$Name' 已添加并创建软链接" -ForegroundColor Green
+  try {
+    New-Item -ItemType SymbolicLink -Path $Dest -Target $Src -Force | Out-Null
+  } catch {
+    Write-Host "无法创建软链接: $ItemName" -ForegroundColor Yellow
+    Write-Host "请以管理员权限运行 PowerShell 或启用开发者模式。"
+    throw
+  }
+
+  Write-Host "LINK $ItemName" -ForegroundColor Green
 }
 
-function Add-File {
+function Sync-ManagedDirectory {
   param(
-    [string]$Type,
-    [string]$Name
+    [string]$SourceDir,
+    [string]$TargetDir,
+    [string]$Kind,
+    [string[]]$ProtectedNames = @()
   )
-  $src = Join-Path $HOME ".claude\$Type\$Name.md"
-  $dest = Join-Path $ConfigDir "$Type\$Name.md"
 
-  if (-not (Test-Path -LiteralPath $src -PathType Leaf)) {
-    Write-Host "错误: $($Type.TrimEnd('s')) 不存在于 $src"
-    exit 1
-  }
-
-  if (Test-IsLink $src) {
-    $target = Get-LinkTarget $src
-    if ($target -and $target.StartsWith($ConfigDir, [System.StringComparison]::OrdinalIgnoreCase)) {
-      Write-Host "错误: '$Name' 已经在同步中"
-      exit 1
+  $desired = @{}
+  if (Test-Path -LiteralPath $SourceDir -PathType Container) {
+    if ($Kind -eq "dir") {
+      $items = Get-ChildItem -LiteralPath $SourceDir -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -ne ".gitkeep" }
+    } else {
+      $items = Get-ChildItem -LiteralPath $SourceDir -File -Filter "*.md" -ErrorAction SilentlyContinue
+    }
+    foreach ($item in $items) {
+      $desired[$item.Name] = $item.FullName
     }
   }
 
-  Write-Host "正在将 $($Type.TrimEnd('s')) '$Name' 添加到仓库..."
-  New-Item -ItemType Directory -Path (Join-Path $ConfigDir $Type) -Force | Out-Null
-  Copy-Item -LiteralPath $src -Destination $dest -Force
-  Remove-Item -LiteralPath $src -Force
-  New-Item -ItemType SymbolicLink -Path $src -Target $dest -Force | Out-Null
-  Write-Host "✓ $($Type.TrimEnd('s')) '$Name' 已添加并创建软链接" -ForegroundColor Green
-}
+  New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
 
-function Remove-Skill {
-  param([string]$Name)
-  $src = Join-Path $HOME ".claude\skills\$Name"
-  $dest = Join-Path $ConfigDir "skills\$Name"
-
-  if (-not (Test-Path -LiteralPath $dest -PathType Container)) {
-    Write-Host "错误: Skill '$Name' 不在仓库中"
-    exit 1
-  }
-
-  Write-Host "正在从仓库移除 skill '$Name'..."
-  if (Test-IsLink $src) {
-    $target = Get-LinkTarget $src
-    if ($target -and $target.StartsWith($ConfigDir, [System.StringComparison]::OrdinalIgnoreCase)) {
-      Remove-Item -LiteralPath $src -Force
-      Copy-Item -LiteralPath $dest -Destination $src -Recurse -Force
+  $existing = Get-ChildItem -LiteralPath $TargetDir -Force -ErrorAction SilentlyContinue
+  foreach ($entry in $existing) {
+    if ($entry.Name.StartsWith(".")) {
+      continue
+    }
+    if ($ProtectedNames -contains $entry.Name) {
+      continue
+    }
+    if (-not $desired.ContainsKey($entry.Name)) {
+      Remove-Item -LiteralPath $entry.FullName -Recurse -Force
+      Write-Host "REMOVE $($entry.FullName)" -ForegroundColor Yellow
     }
   }
-  Remove-Item -LiteralPath $dest -Recurse -Force
-  Write-Host "✓ Skill '$Name' 已从仓库移除（保留为本地）" -ForegroundColor Green
+
+  foreach ($name in $desired.Keys) {
+    $dest = Join-Path $TargetDir $name
+    Ensure-SymbolicLink $desired[$name] $dest $dest
+  }
 }
 
-function Remove-File {
+function Sync-OptionalFile {
   param(
-    [string]$Type,
-    [string]$Name
+    [string]$RootDir,
+    [string]$RelativePath
   )
-  $src = Join-Path $HOME ".claude\$Type\$Name.md"
-  $dest = Join-Path $ConfigDir "$Type\$Name.md"
 
-  if (-not (Test-Path -LiteralPath $dest -PathType Leaf)) {
-    Write-Host "错误: $($Type.TrimEnd('s')) '$Name' 不在仓库中"
-    exit 1
+  $src = Join-Path $ConfigDir $RelativePath
+  $dest = Join-Path $RootDir $RelativePath
+
+  if (Test-Path -LiteralPath $src -PathType Leaf) {
+    Ensure-SymbolicLink $src $dest $dest
+    return
   }
 
-  Write-Host "正在从仓库移除 $($Type.TrimEnd('s')) '$Name'..."
-  if (Test-IsLink $src) {
-    $target = Get-LinkTarget $src
-    if ($target -and $target.StartsWith($ConfigDir, [System.StringComparison]::OrdinalIgnoreCase)) {
-      Remove-Item -LiteralPath $src -Force
-      Copy-Item -LiteralPath $dest -Destination $src -Force
+  if (Test-Path -LiteralPath $dest) {
+    Remove-Item -LiteralPath $dest -Force -Recurse
+    Write-Host "REMOVE $dest" -ForegroundColor Yellow
+  }
+}
+
+function Apply-ConfigSyncToTarget {
+  param([hashtable]$Target)
+
+  $rootDir = $Target.RootDir
+
+  New-Item -ItemType Directory -Path $rootDir -Force | Out-Null
+
+  if ($Target.SyncOptionalFiles) {
+    foreach ($file in $OptionalFiles) {
+      Sync-OptionalFile $rootDir $file
     }
   }
-  Remove-Item -LiteralPath $dest -Force
-  Write-Host "✓ $($Type.TrimEnd('s')) '$Name' 已从仓库移除（保留为本地）" -ForegroundColor Green
+
+  foreach ($rule in $ManagedSyncRules) {
+    $protected = @()
+    if ($Target.ProtectedNames -and $Target.ProtectedNames.ContainsKey($rule.TargetPath)) {
+      $protected = $Target.ProtectedNames[$rule.TargetPath]
+    }
+    Sync-ManagedDirectory `
+      (Join-Path $ConfigDir $rule.RepoPath) `
+      (Join-Path $rootDir $rule.TargetPath) `
+      $rule.Kind `
+      $protected
+  }
 }
 
-function Pull-Changes {
-  Write-Host "正在拉取最新更改..."
-  Push-Location $ConfigDir
-  & git pull
-  Write-Host ""
-  Write-Host "重新运行安装..."
-  & (Join-Path $ConfigDir "install.ps1")
-  Pop-Location
+function Apply-ConfigSync {
+  for ($i = 0; $i -lt $SyncTargets.Count; $i++) {
+    $target = $SyncTargets[$i]
+    Write-Host "正在对齐 ~/$($target.Name) ..."
+    Apply-ConfigSyncToTarget $target
+    if ($i -lt ($SyncTargets.Count - 1)) {
+      Write-Host ""
+    }
+  }
 }
 
-function Push-Changes {
+function Sync-Changes {
   Push-Location $ConfigDir
-  $status = & git status --porcelain
-  if (-not $status) {
-    Write-Host "没有更改需要推送 - 工作区干净"
+  try {
+    Write-Host "正在拉取远程更改..."
+    & git pull --rebase
+
+    Write-Host ""
+    Apply-ConfigSync
+
+    $status = & git status --porcelain
+    if (-not $status) {
+      Write-Host ""
+      Write-Host "已与远程同步，工作区干净。" -ForegroundColor Green
+      return
+    }
+
+    Write-Host ""
+    Write-Host "检测到本地更改:"
+    & git status --short
+    Write-Host ""
+    $msg = Read-Host "提交信息（留空则跳过推送）"
+    if ([string]::IsNullOrWhiteSpace($msg)) {
+      Write-Host "已跳过提交与推送。" -ForegroundColor Yellow
+      return
+    }
+
+    & git add -A
+    & git commit -m $msg
+    & git push
+    Write-Host "✓ 已推送到远程" -ForegroundColor Green
+  } finally {
     Pop-Location
-    exit 0
   }
-
-  Write-Host "待推送的更改:"
-  & git status --short
-  Write-Host ""
-  $msg = Read-Host "提交信息（或 Ctrl+C 取消）"
-  & git add -A
-  & git commit -m $msg
-  & git push
-  Pop-Location
-
-  Write-Host "✓ 已推送到远程" -ForegroundColor Green
 }
 
 $command = $Args[0]
-$type = $Args[1]
-$name = $Args[2]
 
 switch ($command) {
-  "add" {
-    if (-not $type -or -not $name) {
-      Write-Host "用法: .\sync.ps1 add <类型> <名称>"
-      Write-Host "类型: skill, agent, rule, command"
-      exit 1
-    }
-    Assert-EnvironmentReady "add" $type
-    switch ($type) {
-      "skill" { Add-Skill $name }
-      "agent" { Add-File "agents" $name }
-      "rule" { Add-File "rules" $name }
-      "command" { Add-File "commands" $name }
-      default { Write-Host "未知类型: $type（可用: skill, agent, rule, command）"; exit 1 }
-    }
-  }
-  "remove" {
-    if (-not $type -or -not $name) {
-      Write-Host "用法: .\sync.ps1 remove <类型> <名称>"
-      Write-Host "类型: skill, agent, rule, command"
-      exit 1
-    }
-    Assert-EnvironmentReady "remove" $type
-    switch ($type) {
-      "skill" { Remove-Skill $name }
-      "agent" { Remove-File "agents" $name }
-      "rule" { Remove-File "rules" $name }
-      "command" { Remove-File "commands" $name }
-      default { Write-Host "未知类型: $type（可用: skill, agent, rule, command）"; exit 1 }
-    }
-  }
-  "pull" {
-    Assert-EnvironmentReady "pull" $null
-    Pull-Changes
-  }
-  "push" { Push-Changes }
+  "sync" { Sync-Changes }
   "-h" { Show-Help }
   "--help" { Show-Help }
-  default { Show-Help }
+  "" { Sync-Changes }
+  $null { Sync-Changes }
+  default {
+    Write-Host "未知命令: $command"
+    Write-Host ""
+    Show-Help
+    exit 1
+  }
 }
