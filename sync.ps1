@@ -14,14 +14,11 @@ $ManagedSyncRules = @(
   @{ RepoPath = "commands"; TargetPath = "commands"; Kind = "file" }
 )
 
-$OptionalFiles = @("settings.json", "statusline.sh")
-
 # Target profiles: add/remove profiles here.
 $SyncTargets = @(
   @{
     Name = "claude"
     RootDir = (Join-Path $HOME ".claude")
-    SyncOptionalFiles = $true
     ProtectedNames = @{
       skills = @()
     }
@@ -29,7 +26,6 @@ $SyncTargets = @(
   @{
     Name = "codex"
     RootDir = (Join-Path $HOME ".codex")
-    SyncOptionalFiles = $false
     ProtectedNames = @{
       skills = @(".system")
     }
@@ -166,38 +162,12 @@ function Sync-ManagedDirectory {
   }
 }
 
-function Sync-OptionalFile {
-  param(
-    [string]$RootDir,
-    [string]$RelativePath
-  )
-
-  $src = Join-Path $ConfigDir $RelativePath
-  $dest = Join-Path $RootDir $RelativePath
-
-  if (Test-Path -LiteralPath $src -PathType Leaf) {
-    Ensure-SymbolicLink $src $dest $dest
-    return
-  }
-
-  if (Test-Path -LiteralPath $dest) {
-    Remove-Item -LiteralPath $dest -Force -Recurse
-    Write-Host "REMOVE $dest" -ForegroundColor Yellow
-  }
-}
-
 function Apply-ConfigSyncToTarget {
   param([hashtable]$Target)
 
   $rootDir = $Target.RootDir
 
   New-Item -ItemType Directory -Path $rootDir -Force | Out-Null
-
-  if ($Target.SyncOptionalFiles) {
-    foreach ($file in $OptionalFiles) {
-      Sync-OptionalFile $rootDir $file
-    }
-  }
 
   foreach ($rule in $ManagedSyncRules) {
     $protected = @()

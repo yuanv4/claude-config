@@ -14,8 +14,6 @@ cd claude-config
 
 ```
 claude-config/
-├── settings.json       # Claude Code 设置（不含密钥）
-├── settings.local.json # 本地敏感配置（不入库）
 ├── skills/             # 技能（子目录含 SKILL.md，如 commit、docx、pdf 等）
 ├── rules/              # 规则文件
 ├── agents/             # 子代理定义
@@ -40,12 +38,6 @@ claude-config/
 > 注意：脚本会对齐 `skills`、`agents`、`rules`、`commands`，并保留 `~/.codex/skills/.system`。
 
 > 扩展方式：在 `sync.ps1` 顶部修改 `$ManagedSyncRules`（同步哪些目录）和 `$SyncTargets`（同步到哪些根目录）。
-
-## 敏感信息
-
-- `settings.json` 中不包含密钥，可安全提交
-- `settings.local.json` 包含 `ANTHROPIC_AUTH_TOKEN` 等敏感信息，已被 `.gitignore` 忽略
-- 在新机器上安装后，需手动创建 `settings.local.json` 并填入密钥
 
 ## 参考
 
