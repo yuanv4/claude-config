@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# Claude/Codex 配置同步脚本（仓库完全同步版）
+# Claude 配置同步脚本（仓库完全同步版）
 # 用法: .\sync.ps1 [sync|--help]
 
 $ErrorActionPreference = "Stop"
@@ -23,21 +23,14 @@ $SyncTargets = @(
       skills = @()
     }
   }
-  @{
-    Name = "codex"
-    RootDir = (Join-Path $HOME ".codex")
-    ProtectedNames = @{
-      skills = @(".system")
-    }
-  }
 )
 
 function Show-Help {
-  Write-Host "Claude/Codex 配置同步（仓库完全同步版）"
+  Write-Host "Claude 配置同步（仓库完全同步版）"
   Write-Host "======================================"
   Write-Host ""
   Write-Host "用法:"
-  Write-Host "  .\sync.ps1 sync    拉取远程、对齐 ~/.claude 和 ~/.codex、提交并推送"
+  Write-Host "  .\sync.ps1 sync    拉取远程、对齐 ~/.claude、提交并推送"
   Write-Host "  .\sync.ps1         默认执行 sync"
   Write-Host ""
   Write-Host "说明:"
