@@ -1,5 +1,5 @@
 ---
-name: codex-cli-delegate
+name: codex
 description: 使用 OpenAI Codex CLI（codex exec）执行具体工程任务。适用于功能开发、Bug 修复、跨文件修改、重构与批量替换、测试编写、仓库分析、技术文档生成，或用户明确要求使用 codex/codex cli 的场景。
 argument-hint: "[任务描述]"
 ---
@@ -23,6 +23,17 @@ argument-hint: "[任务描述]"
 7. 分析仓库结构并输出风险点或改进建议。
 8. 用户明确要求使用 `codex`、`codex cli`、`codex exec`。
 
+## Windows 沙箱说明
+
+Windows 下的安全沙箱使用受限令牌（restricted token）机制，与 macOS（Seatbelt）和 Linux（Landlock）行为不同：
+
+- `--sandbox read-only`：限制写入，但在 Windows 上部分场景下可能仍有限制不完整的问题
+- `--sandbox workspace-write`：允许向工作目录写入，**Windows 推荐的默认策略**
+- `--sandbox danger-full-access`：完全访问，不受沙箱限制
+- `--dangerously-bypass-approvals-and-sandbox`：完全绕过沙箱和审批，**仅在外部已有隔离环境时使用**
+
+> **Windows 重要提示**：`[windows] sandbox = "elevated"` 配置项在当前版本（≥0.107.0）中已无效（对应特性已被标记为 removed）。应通过 `--sandbox` 参数显式控制沙箱策略，而非依赖配置文件的 windows 节。
+
 ## 执行步骤
 
 ### 第一步：确认 CLI 可用
@@ -43,15 +54,17 @@ codex --version
 | 涉及文件 > 2 个，或需跨文件一致性保证 | 委托 Codex |
 | 涉及文件 ≤ 2 个，且预估改动 ≤ 20 行 | 本地直接处理，无需委托 |
 
-### 第三步：确定安全沙箱等级
+### 第三步：确定沙箱策略
 
 根据任务风险选择沙箱策略，**禁止对低风险任务使用高权限参数**：
 
-| 风险等级 | 典型场景 | 沙箱参数 | 审批参数 |
-|---|---|---|---|
-| 只读 | 仓库分析、代码审查、文档阅读 | `--sandbox read-only` | `--ask-for-approval auto` |
-| 受限写入 | 生成文档、新建独立文件 | `--sandbox danger-full-access` | `--ask-for-approval auto` |
-| 完全写入 | 重构、批量替换、修复 Bug、跨文件修改 | `--sandbox danger-full-access` | `--ask-for-approval never` |
+| 风险等级 | 典型场景 | 沙箱参数 |
+|---|---|---|
+| 只读 | 仓库分析、代码审查、文档阅读 | `--sandbox read-only` |
+| 受限写入 | 生成文档、新建独立文件 | `--sandbox workspace-write` |
+| 完全写入 | 重构、批量替换、修复 Bug、跨文件修改 | `--sandbox danger-full-access` |
+
+> Windows 下 `read-only` 沙箱若出现异常（进程挂起、权限报错），降级为 `workspace-write`。
 
 ### 第四步：组装高质量任务提示词
 
@@ -65,12 +78,34 @@ codex --version
 
 ### 第五步：执行（非交互模式）
 
-优先通过 stdin 传入提示词，避免转义问题：
+**Windows 下优先使用临时文件传递提示词**，避免 PowerShell here-string 编码问题（UTF-16LE vs UTF-8）和管道截断：
 
 ```powershell
-@'
+# 推荐：将提示词写入临时文件，再用文件重定向传入
+$prompt = @"
 [在这里填写给 Codex 的详细任务说明]
-'@ | codex -a never exec --sandbox <沙箱策略> --skip-git-repo-check -
+"@
+$tmpFile = "$env:TEMP\codex_prompt_$(Get-Random).txt"
+[System.IO.File]::WriteAllText($tmpFile, $prompt, [System.Text.Encoding]::UTF8)
+codex exec --sandbox <沙箱策略> --skip-git-repo-check - < $tmpFile
+Remove-Item $tmpFile -ErrorAction SilentlyContinue
+```
+
+若使用 bash（Git Bash / WSL），可用 heredoc：
+
+```bash
+codex exec --sandbox <沙箱策略> --skip-git-repo-check - <<'EOF'
+[在这里填写给 Codex 的详细任务说明]
+EOF
+```
+
+**避免使用**的写法（Windows 下不稳定）：
+
+```powershell
+# 不推荐：PowerShell here-string 通过管道传入
+@'
+[任务说明]
+'@ | codex exec --sandbox ... --skip-git-repo-check -
 ```
 
 执行后立即检查退出码：
@@ -81,12 +116,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 ```
 
-对于输出内容可能较大的任务，将结果重定向到临时文件再读取：
+对于输出内容可能较大的任务，将结果写入文件再读取：
 
 ```powershell
-@'
-[任务说明]
-'@ | codex -a never exec --sandbox danger-full-access --skip-git-repo-check - | Tee-Object -FilePath "$env:TEMP\codex_output.txt"
+$tmpFile = "$env:TEMP\codex_prompt_$(Get-Random).txt"
+[System.IO.File]::WriteAllText($tmpFile, $prompt, [System.Text.Encoding]::UTF8)
+codex exec --sandbox danger-full-access --skip-git-repo-check - < $tmpFile | Tee-Object -FilePath "$env:TEMP\codex_output.txt"
+Remove-Item $tmpFile -ErrorAction SilentlyContinue
 ```
 
 ### 第六步：迭代修复（有上限）
@@ -138,5 +174,6 @@ codex exec resume --last "根据上一步结果继续修复，并确保测试通
 
 - **CLI 不可用**：提示用户安装或修复环境，退回本地直接处理。
 - **退出码非零**：读取错误信息，判断是网络问题、权限问题还是任务本身问题，再决定是否重试。
+- **Windows 沙箱挂起**：`read-only` 沙箱在 Windows 下有时会因受限令牌导致子进程挂起，改用 `--sandbox workspace-write` 或 `--dangerously-bypass-approvals-and-sandbox` 重试。
 - **迭代超过 3 次仍不达标**：停止委托，退回本地处理，向用户说明卡点。
 - **执行挂起无响应**：终止进程，检查网络连接或 API 配额，再决定是否重试。
