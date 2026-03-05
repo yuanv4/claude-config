@@ -23,129 +23,32 @@ argument-hint: "[任务描述]"
 7. 分析仓库结构并输出风险点或改进建议。
 8. 用户明确要求使用 `codex`、`codex cli`、`codex exec`。
 
+**不触发**：涉及文件 ≤ 2 个且预估改动 ≤ 20 行的简单任务，本地直接处理即可。
+
 ## Windows 沙箱说明
 
-Windows 下的安全沙箱使用受限令牌（restricted token）机制，与 macOS（Seatbelt）和 Linux（Landlock）行为不同：
+Windows 下统一使用 `--sandbox danger-full-access`。`read-only` 和 `workspace-write` 均使用受限令牌机制，高概率触发 `CreateProcessWithLogonW failed: 1326/1909` 而无法执行子进程。
 
-- `--sandbox read-only`：限制写入，但在 Windows 上部分场景下可能仍有限制不完整的问题
-- `--sandbox workspace-write`：允许向工作目录写入，**Windows 推荐的默认策略**
-- `--sandbox danger-full-access`：完全访问，不受沙箱限制
-- `--dangerously-bypass-approvals-and-sandbox`：完全绕过沙箱和审批，**仅在外部已有隔离环境时使用**
+降级链（当 `danger-full-access` 也失败时）：
 
-> **Windows 重要提示**：`[windows] sandbox = "elevated"` 配置项在当前版本（≥0.107.0）中已无效（对应特性已被标记为 removed）。应通过 `--sandbox` 参数显式控制沙箱策略，而非依赖配置文件的 windows 节。
+```
+danger-full-access → --dangerously-bypass-approvals-and-sandbox → 本地回退
+```
+
+> macOS/Linux 可根据任务风险选择 `read-only`（只读分析）、`workspace-write`（生成文件）或 `danger-full-access`（跨文件修改）。
+
+> `[windows] sandbox = "elevated"` 配置项在当前版本（≥0.107.0）中已无效。应通过 `--sandbox` 参数显式控制。
 
 ## 执行步骤
 
-### 第一步：确认 CLI 可用
+### 第一步：识别 Shell 环境 & 组装提示词
 
-```powershell
-codex --version
-```
+**先确认当前终端类型**，不要在 Bash 中使用 PowerShell 语法，也不要在 PowerShell 中使用 Bash 语法。判断方式：
 
-若命令不存在，提示用户安装并退出，退回本地直接处理。
+- 检查终端元数据中的 shell 类型
+- 或执行 `echo $PSVersionTable`（PowerShell 有输出）/ `echo $SHELL`（Bash 有输出）
 
-### 第二步：轻量级分流判断
-
-在委托前做快速预判（目标：3 秒内完成，不做深度分析）：
-
-| 条件 | 处理方式 |
-|---|---|
-| 用户明确要求使用 Codex | 无条件委托 |
-| 涉及文件 > 2 个，或需跨文件一致性保证 | 委托 Codex |
-| 涉及文件 ≤ 2 个，且预估改动 ≤ 20 行 | 本地直接处理，无需委托 |
-
-### 第三步：确定沙箱策略
-
-根据任务风险选择沙箱策略，**禁止对低风险任务使用高权限参数**：
-
-| 风险等级 | 典型场景 | 沙箱参数 |
-|---|---|---|
-| 只读 | 仓库分析、代码审查、文档阅读 | `--sandbox read-only` |
-| 受限写入 | 生成文档、新建独立文件 | `--sandbox workspace-write` |
-| 完全写入 | 重构、批量替换、修复 Bug、跨文件修改 | `--sandbox danger-full-access` |
-
-> Windows 下 `read-only` 沙箱若出现异常（进程挂起、权限报错），降级为 `workspace-write`。
-
-### 第四步：组装高质量任务提示词
-
-提示词必须包含以下所有要素：
-
-- 目标与完成标准
-- 文件路径/作用范围
-- 技术约束与禁改项
-- 验证要求（测试、构建、lint）
-- 输出格式要求
-
-### 第五步：执行（非交互模式）
-
-**Windows 下优先使用临时文件传递提示词**，避免 PowerShell here-string 编码问题（UTF-16LE vs UTF-8）和管道截断：
-
-```powershell
-# 推荐：将提示词写入临时文件，再用文件重定向传入
-$prompt = @"
-[在这里填写给 Codex 的详细任务说明]
-"@
-$tmpFile = "$env:TEMP\codex_prompt_$(Get-Random).txt"
-[System.IO.File]::WriteAllText($tmpFile, $prompt, [System.Text.Encoding]::UTF8)
-codex exec --sandbox <沙箱策略> --skip-git-repo-check - < $tmpFile
-Remove-Item $tmpFile -ErrorAction SilentlyContinue
-```
-
-若使用 bash（Git Bash / WSL），可用 heredoc：
-
-```bash
-codex exec --sandbox <沙箱策略> --skip-git-repo-check - <<'EOF'
-[在这里填写给 Codex 的详细任务说明]
-EOF
-```
-
-**避免使用**的写法（Windows 下不稳定）：
-
-```powershell
-# 不推荐：PowerShell here-string 通过管道传入
-@'
-[任务说明]
-'@ | codex exec --sandbox ... --skip-git-repo-check -
-```
-
-执行后立即检查退出码：
-
-```powershell
-if ($LASTEXITCODE -ne 0) {
-    # 进入失败回退流程
-}
-```
-
-对于输出内容可能较大的任务，将结果写入文件再读取：
-
-```powershell
-$tmpFile = "$env:TEMP\codex_prompt_$(Get-Random).txt"
-[System.IO.File]::WriteAllText($tmpFile, $prompt, [System.Text.Encoding]::UTF8)
-codex exec --sandbox danger-full-access --skip-git-repo-check - < $tmpFile | Tee-Object -FilePath "$env:TEMP\codex_output.txt"
-Remove-Item $tmpFile -ErrorAction SilentlyContinue
-```
-
-### 第六步：迭代修复（有上限）
-
-若结果不达标，使用 `resume` 继续迭代，**最多重试 3 次**：
-
-```powershell
-codex exec resume --last "根据上一步结果继续修复，并确保测试通过"
-```
-
-超过 3 次仍未达标，停止委托并退回本地直接处理，同时告知用户原因。
-
-### 第七步：本地验证
-
-按任务需要执行测试/构建/lint，验证 Codex 输出的实际效果。
-
-### 第八步：向用户汇报
-
-用中文给出结论，包含：结果摘要、潜在风险、验证状态、下一步建议。
-
-## 提示词模板
-
-调用 Codex 时优先使用以下结构：
+**然后组装提示词**，使用以下结构：
 
 ```text
 任务目标：
@@ -170,10 +73,85 @@ codex exec resume --last "根据上一步结果继续修复，并确保测试通
 - 再给验证结果
 ```
 
+### 第二步：执行（非交互模式）
+
+根据 Shell 环境选择对应方式。
+
+**PowerShell**：临时文件 + `Get-Content` 管道（PowerShell 不支持 `<` 输入重定向）。
+
+```powershell
+$prompt = @"
+[给 Codex 的详细任务说明]
+"@
+$tmpFile = "$env:TEMP\codex_prompt_$(Get-Random).txt"
+[System.IO.File]::WriteAllText($tmpFile, $prompt, [System.Text.Encoding]::UTF8)
+Push-Location <工作目录>
+Get-Content $tmpFile -Raw -Encoding UTF8 | codex exec --sandbox danger-full-access --skip-git-repo-check -
+$exitCode = $LASTEXITCODE
+Pop-Location
+Remove-Item $tmpFile -ErrorAction SilentlyContinue
+if ($exitCode -ne 0) { <# 进入失败回退流程 #> }
+```
+
+大输出任务加 `Tee-Object` 同时写入文件：
+
+```powershell
+Get-Content $tmpFile -Raw -Encoding UTF8 | codex exec --sandbox danger-full-access --skip-git-repo-check - | Tee-Object -FilePath "$env:TEMP\codex_output.txt"
+```
+
+**Bash（Git Bash / WSL）**：heredoc 传递提示词。
+
+```bash
+cd <工作目录>
+codex exec --sandbox danger-full-access --skip-git-repo-check - <<'EOF'
+[给 Codex 的详细任务说明]
+EOF
+```
+
+大输出任务加 `tee`：
+
+```bash
+codex exec --sandbox danger-full-access --skip-git-repo-check - <<'EOF' | tee /tmp/codex_output.txt
+[给 Codex 的详细任务说明]
+EOF
+```
+
+**禁止混用**：
+
+| 错误做法 | 原因 |
+|---|---|
+| 在 PowerShell 中使用 `<<'EOF'` heredoc | PowerShell 不支持此语法 |
+| 在 Bash 中使用 `Get-Content`、`$env:TEMP`、`Push-Location` | 这些是 PowerShell cmdlet |
+| 在 PowerShell 中使用 `<` 重定向 | `<` 在 PowerShell 中为保留符号 |
+| 在 Bash 中使用 `@"..."@` here-string | 这是 PowerShell 语法 |
+
+### 第三步：迭代修复（最多 3 次）
+
+若结果不达标，构造包含上次错误信息的**新提示词**重新调用 `codex exec`，最多重试 3 次。
+
+在新提示词中追加：
+
+```text
+上次执行的问题：
+- [关键错误信息]
+
+请在上次结果基础上修复以上问题，并确保验证通过。
+```
+
+超过 3 次仍未达标，停止委托并退回本地处理，告知用户卡点。
+
+### 第四步：验证
+
+检查 Codex 输出中是否已包含验证结果（测试通过、构建成功等）。如缺失，本地补充执行验证命令。
+
 ## 失败回退
 
-- **CLI 不可用**：提示用户安装或修复环境，退回本地直接处理。
-- **退出码非零**：读取错误信息，判断是网络问题、权限问题还是任务本身问题，再决定是否重试。
-- **Windows 沙箱挂起**：`read-only` 沙箱在 Windows 下有时会因受限令牌导致子进程挂起，改用 `--sandbox workspace-write` 或 `--dangerously-bypass-approvals-and-sandbox` 重试。
-- **迭代超过 3 次仍不达标**：停止委托，退回本地处理，向用户说明卡点。
-- **执行挂起无响应**：终止进程，检查网络连接或 API 配额，再决定是否重试。
+| 场景 | 处理方式 |
+|---|---|
+| CLI 不可用 | 提示用户安装或修复环境，退回本地处理 |
+| 退出码非零 | 读取错误信息，判断网络/权限/任务问题，决定是否重试 |
+| Windows 沙箱失败（`CreateProcessWithLogonW`） | 按降级链：`danger-full-access` → `--dangerously-bypass-approvals-and-sandbox` → 本地回退 |
+| 退出码为 0 但子进程全部失败 | 检查输出中的 `exec error` 或 `CreateProcessWithLogonW`，按沙箱降级处理 |
+| 迭代超过 3 次仍不达标 | 停止委托，退回本地处理，说明卡点 |
+| 执行挂起无响应 | 终止进程，检查网络/API 配额，再决定是否重试 |
+| Shell 语法不匹配 | 确认当前终端类型（PowerShell / Bash），切换到对应的执行方式 |
