@@ -173,6 +173,11 @@ function Apply-ConfigSyncToTarget {
       $rule.Kind `
       $protected
   }
+
+  $repoSettings = Join-Path $ConfigDir "settings.local.json"
+  if (Test-Path -LiteralPath $repoSettings) {
+    Ensure-SymbolicLink $repoSettings (Join-Path $rootDir "settings.local.json") "settings.local.json"
+  }
 }
 
 function Apply-ConfigSync {
