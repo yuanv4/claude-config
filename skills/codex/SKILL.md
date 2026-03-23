@@ -29,7 +29,7 @@ argument-hint: "[任务描述]"
 
 ```bash
 cd <工作目录>
-codex exec --sandbox danger-full-access --approval never --skip-git-repo-check - <<'EOF'
+codex exec --sandbox danger-full-access --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check - <<'EOF'
 <任务描述：目标 + 范围 + 约束 + 完成标准>
 EOF
 ```
@@ -43,7 +43,7 @@ $prompt = @"
 $tmp = "$env:TEMP\codex_$(Get-Random).txt"
 [System.IO.File]::WriteAllText($tmp, $prompt, [System.Text.Encoding]::UTF8)
 Push-Location <工作目录>
-Get-Content $tmp -Raw -Encoding UTF8 | codex exec --sandbox danger-full-access --approval never --skip-git-repo-check -
+Get-Content $tmp -Raw -Encoding UTF8 | codex exec --sandbox danger-full-access --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -
 Pop-Location
 Remove-Item $tmp -ErrorAction SilentlyContinue
 ```
