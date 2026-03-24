@@ -178,6 +178,15 @@ function Apply-ConfigSyncToTarget {
   if (Test-Path -LiteralPath $repoSettings) {
     Ensure-SymbolicLink $repoSettings (Join-Path $rootDir "settings.local.json") "settings.local.json"
   }
+
+  foreach ($pluginFile in @("installed_plugins.json", "known_marketplaces.json")) {
+    $repoFile = Join-Path $ConfigDir "plugins\$pluginFile"
+    if (Test-Path -LiteralPath $repoFile) {
+      $pluginsDir = Join-Path $rootDir "plugins"
+      New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null
+      Ensure-SymbolicLink $repoFile (Join-Path $pluginsDir $pluginFile) "plugins\$pluginFile"
+    }
+  }
 }
 
 function Apply-ConfigSync {
