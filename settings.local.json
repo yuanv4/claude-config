@@ -1,4 +1,18 @@
 {
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "asyncRewake": true,
+            "command": "INPUT=$(cat); CMD=$(printf '%s' \"$INPUT\" | jq -r '.tool_input.command // \"\"'); printf '%s' \"$CMD\" | grep -q 'git commit' || exit 0; echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[auto-update-claudemd] git commit 完成。请按照 ~/.claude/skills/auto-update-claudemd/SKILL.md 的策略：用 git show --stat --patch --find-renames --format=fuller HEAD 分析实际文件变更，判断是否产生项目级知识，并路由到正确载体（根 CLAUDE.md / 变更所在子目录的 CLAUDE.md / 跳过）。\"}}'; exit 2"
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Read",
@@ -27,7 +41,9 @@
       "Bash(which:*)",
       "Bash(type:*)",
       "Bash(uname:*)",
-      "Bash(env)"
+      "Bash(env)",
+
+      "Bash(codex exec:*)"
     ]
   }
 }
