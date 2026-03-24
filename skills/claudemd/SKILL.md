@@ -1,8 +1,87 @@
 ---
 name: claudemd
-description: 一个全面的入门流程，用于在当前仓库中设置 CLAUDE.md 及相关的技能/钩子，包括代码库探索、用户访谈和迭代式提案完善。
+description: 一个全面的入门流程，用于在当前仓库中设置 CLAUDE.md 及相关的技能/钩子，包括代码库探索、用户访谈和迭代式提案完善。支持已有 CLAUDE.md 时的轻量维护模式。
 ---
 为此仓库设置一个最小化的 CLAUDE.md（以及可选的技能和钩子）。CLAUDE.md 会加载到每个 Claude Code 会话中，因此它必须简洁，只包含那些如果没有它 Claude 就会出错的内容。
+
+## 第 0 阶段：判定是"首次设置"还是"维护模式"
+
+先检查仓库根目录是否已存在 `CLAUDE.md`。
+
+- 如果 **不存在**：按下面的完整流程执行（第 1-8 阶段）。
+- 如果 **已存在**：**默认进入维护模式（maintenance mode）**，不要直接进入完整 onboarding。
+- 如果用户明确表示想"重做 / 重新 onboarding / 从头整理 / 顺便设计 skills/hooks/CLAUDE.local.md / 跑完整流程"，则**退出维护模式**，改走完整的第 1-8 阶段。
+
+### 维护模式目标
+
+快速扫描现有 `CLAUDE.md`，检查它是否与当前代码状态一致，并提出最小必要修改。重点是：
+- 找出过时、冲突、失效或应下沉到子目录的条目
+- 补充少量当前缺失但高价值的事实
+- 以最小改动维护现有知识，而不是重新做一轮完整设置
+
+### 维护模式下要跳过的内容
+
+- **不要询问第 1 阶段的完整 onboarding 问题**
+- **不要执行第 3 阶段的完整补缺访谈**
+- **不要默认进入第 5、6、7、8 阶段**
+- **不要自动提议或创建 skills、hooks、CLAUDE.local.md、linting、GitHub CLI、插件或其他优化项**
+- 只有在用户**明确要求**时，才恢复这些阶段中的相应内容
+
+### 维护模式流程
+
+#### A. 读取现有 CLAUDE 知识
+
+读取根目录 `CLAUDE.md`。如有必要，再读取其中直接引用或明显相关的子目录 `CLAUDE.md`。
+
+提取其中的关键事实：
+- 构建、测试、lint、格式化命令
+- 目录职责、模块边界、关键工作流
+- 非默认约定、命名规则、接口约束
+- 长期陷阱、环境变量、设置前提
+
+#### B. 做最小必要的现状校验
+
+只读取少量高信号文件来验证现有 `CLAUDE.md` 是否过时；**不要做完整代码库探索**。优先检查：
+- 清单/构建文件（如 `package.json`、`pyproject.toml`、`Cargo.toml`、`go.mod`、`pom.xml` 等）
+- README
+- 顶层目录结构
+- `CLAUDE.md` 中提到的路径、脚本、配置文件是否仍存在
+- 与现有条目直接相关的少量配置文件
+
+重点检测：
+- 命令是否仍有效
+- 框架、运行时、包管理器是否变化
+- 目录结构或模块边界是否漂移
+- 条目是否只适用于某个子目录，应该从根目录下沉
+- 是否存在完全陈旧、应删除的内容
+
+#### C. 仅在必要时做极少量澄清
+
+只有当代码和现有文件**无法确认**某个条目应如何更新时，才询问用户。问题必须是**定向澄清**，而不是完整访谈。例如：
+- "`make verify` 似乎已不存在，是否应改为 `just verify`？"
+- "这条关于 `legacy/` 的说明看起来已过时，是否直接删除？"
+
+不要询问团队角色、沟通偏好、个人习惯、skills/hooks 偏好等 onboarding 问题。
+
+#### D. 产出最小变更提案
+
+通过 AskUserQuestion 的 `preview` 字段展示变更提案，使用以下类型：
+
+- **[Add]** `<new fact>` → `CLAUDE.md` (or `<subdir>/CLAUDE.md`)
+- **[Update]** `<old entry>` → `<new entry>` in `CLAUDE.md`
+- **[Downscope]** `<entry>` in root → `<subdir>/CLAUDE.md`
+- **[Delete]** `<stale entry>` from `CLAUDE.md`
+- **[Gap]** `<unconfirmed fact>` — needs user confirmation before writing
+
+不要在维护模式中混入 skills、hooks、CLAUDE.local.md 或其他优化建议。
+
+如果扫描没发现任何问题，直接告知用户"CLAUDE.md 已是最新，无需更改"，结束。
+
+#### E. 执行变更并结束
+
+按用户确认的变更列表更新 CLAUDE.md（同第 4 阶段的增量更新规则），完成后简短总结。
+
+结束时附一句提示："如果你想改为完整 onboarding（重新访谈、重建结构、顺带设计 skills/hooks/CLAUDE.local.md），请明确说明，我会切回完整流程。"
 
 ## 第 1 阶段：询问要设置什么
 
@@ -19,6 +98,8 @@ description: 一个全面的入门流程，用于在当前仓库中设置 CLAUDE
   Description for hooks: "在工具事件上运行的确定性 shell 命令（例如每次编辑后格式化）。Claude 不能跳过它们。"
 
 ## 第 2 阶段：探索代码库
+
+> **维护模式下**：本阶段仅执行与现有 `CLAUDE.md` 条目直接相关的最小校验，不做完整代码库勘察。请参照第 0 阶段的维护模式流程步骤 A-B 执行。
 
 启动一个子代理来勘察代码库，并让它读取关键文件以理解项目：清单文件（package.json、Cargo.toml、pyproject.toml、go.mod、pom.xml 等）、README、Makefile/构建配置、CI 配置、现有的 CLAUDE.md、.claude/rules/、AGENTS.md、.cursor/rules 或 .cursorrules、.github/copilot-instructions.md、.windsurfrules、.clinerules、.mcp.json。
 
@@ -154,6 +235,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 第 5 阶段：编写 CLAUDE.local.md（如果用户选择了个人或两者都要）
 
+> **维护模式默认跳过本阶段**，除非用户明确要求。
+
 在项目根目录写一个最小化的 CLAUDE.local.md。这个文件会与 CLAUDE.md 一起自动加载。创建后，把 `CLAUDE.local.md` 加入项目的 .gitignore，以保持私有。
 
 **消费第 3 阶段偏好队列中目标为 CLAUDE.local.md 的 `note` 条目**（个人级备注）——把每项作为简洁的一行加入。如果用户在第 1 阶段只选择了 personal-only，这就是 `note` 条目的唯一消费方。
@@ -170,6 +253,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 如果 CLAUDE.local.md 已存在：读取它，提出具体补充建议，不要静默覆盖。
 
 ## 第 6 阶段：建议并创建技能（如果用户选择了 “Skills + hooks” 或 “Skills only”）
+
+> **维护模式默认跳过本阶段**，除非用户明确要求。
 
 技能为 Claude 提供按需使用的能力，而不会让每次会话都变得臃肿。
 
@@ -201,6 +286,8 @@ description: <what the skill does and when to use it>
 
 ## 第 7 阶段：建议额外优化
 
+> **维护模式默认跳过本阶段**，除非用户明确要求。
+
 告诉用户，现在 CLAUDE.md 和技能（如果已选择）已经就位，你将建议几个额外的优化项。
 
 检查环境，并针对发现的每个缺口提问（使用 AskUserQuestion）：
@@ -229,6 +316,8 @@ description: <what the skill does and when to use it>
 对每个 “yes” 都先执行，再继续下一项。
 
 ## 第 8 阶段：总结和后续步骤
+
+> **维护模式默认跳过本阶段**，除非用户明确要求。
 
 回顾已设置的内容——写了哪些文件，以及每个文件中包含的关键点。提醒用户这些文件只是起点：他们应该审阅并调整，也可以随时再次运行 `/claudemd` 来重新扫描。
 
