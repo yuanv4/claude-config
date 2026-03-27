@@ -1,31 +1,50 @@
 ---
 name: codex
-description: Delegate tasks to OpenAI Codex expert agents (GPT) for architecture analysis, plan review, scope analysis, code review, security audit, or implementation. Use when the user says "codex", "ask GPT", "use codex to review/implement", or when semantic triggers match (architecture decisions, plan validation, code review, security concerns).
+description: Route tasks to Codex specialist sub-agents for architecture analysis, plan review, scope analysis, code review, security audit, or implementation. Use when the user says "codex", "ask GPT", "use codex to review/implement", or when semantic triggers match.
 ---
 
-# Codex Expert Delegation
+# Codex Delegation Router
 
 > Adapted from [claude-delegator](https://github.com/jarrodwatts/claude-delegator) by [@jarrodwatts](https://github.com/jarrodwatts)
 
-Delegate structured tasks to OpenAI Codex CLI expert agents and synthesize their responses.
+Use this skill as the **entrypoint** for Codex delegation. The skill decides whether delegation is appropriate, selects the right specialist sub-agent, builds the task packet, runs Codex CLI, and synthesizes the result.
 
-## Available Experts
+The specialist prompts now live in [`agents/`](../../agents), not inside this skill.
 
-| Expert | Specialty | Prompt File |
-|--------|-----------|-------------|
-| **Architect** | System design, tradeoffs, complex debugging | `experts/architect.md` |
-| **Plan Reviewer** | Plan validation before execution | `experts/plan-reviewer.md` |
-| **Scope Analyst** | Pre-planning, catching ambiguities | `experts/scope-analyst.md` |
-| **Code Reviewer** | Code quality, bugs, security issues | `experts/code-reviewer.md` |
-| **Security Analyst** | Vulnerabilities, threat modeling | `experts/security-analyst.md` |
+## Available Sub-Agents
+
+| Sub-agent | Specialty | Prompt File |
+|-----------|-----------|-------------|
+| **Architect** | System design, tradeoffs, complex debugging | `../../agents/architect.md` |
+| **Plan Reviewer** | Plan validation before execution | `../../agents/plan-reviewer.md` |
+| **Scope Analyst** | Pre-planning, catching ambiguities | `../../agents/scope-analyst.md` |
+| **Code Reviewer** | Code quality, bugs, security issues | `../../agents/code-reviewer.md` |
+| **Security Analyst** | Vulnerabilities, threat modeling | `../../agents/security-analyst.md` |
+
+## Responsibilities Split
+
+### This Skill Owns
+
+- Trigger detection
+- Specialist selection
+- Delegation prompt assembly
+- Codex CLI invocation
+- Retry and resume flow
+- Result synthesis and verification
+
+### Sub-Agents Own
+
+- Domain-specific reasoning
+- Role-specific response style
+- Review or implementation behavior for their specialty
 
 ## Trigger Detection
 
-### Explicit Triggers (highest priority)
+### Explicit Triggers
 
-| User says | Expert |
-|-----------|--------|
-| "ask GPT", "use codex", "codex review", "codex implement" | Route based on context |
+| User says | Route |
+|-----------|-------|
+| "ask GPT", "use codex", "codex review", "codex implement" | Route based on task context |
 | "review this architecture", "how should I structure" | Architect |
 | "review this plan", "validate before I start" | Plan Reviewer |
 | "analyze the scope", "what am I missing" | Scope Analyst |
@@ -34,62 +53,151 @@ Delegate structured tasks to OpenAI Codex CLI expert agents and synthesize their
 
 ### Semantic Triggers
 
-| Pattern | Expert |
-|---------|--------|
+| Pattern | Route |
+|---------|-------|
 | Architecture/design questions, tradeoff analysis | Architect |
-| After 2+ failed fix attempts (fresh perspective) | Architect |
-| Before starting significant work, plan validation | Plan Reviewer |
-| Vague/ambiguous requirements, "before we start" | Scope Analyst |
-| "what's wrong with", after implementing features | Code Reviewer |
-| Handling sensitive data, auth changes, new API endpoints | Security Analyst |
+| After 2+ failed fix attempts and you want a fresh perspective | Architect |
+| Before significant work, validate the plan | Plan Reviewer |
+| Requirements are vague or ambiguous | Scope Analyst |
+| Post-implementation issue finding or review | Code Reviewer |
+| Sensitive data, auth, permissions, or new API surface | Security Analyst |
 
 ### When NOT to Delegate
 
 - Simple questions you can answer directly
-- First attempt at any fix (try yourself first)
-- Trivial decisions (variable names, formatting)
-- Research tasks (use WebSearch or other tools)
+- First attempt at a straightforward fix
+- Trivial decisions such as naming or formatting
+- Pure research tasks better served by docs or web search
 
----
+## Routing Matrix
+
+Use this table when the right specialist is not obvious:
+
+| Situation | Default Route | Why |
+|-----------|---------------|-----|
+| "How should we structure this?" | Architect | Design and tradeoff driven |
+| "Before we start, what are we missing?" | Scope Analyst | Clarify before planning |
+| "Is this plan solid?" | Plan Reviewer | Validate execution readiness |
+| "Review this change / PR / diff" | Code Reviewer | Correctness-first review |
+| "Is this secure?" / auth / permissions / exposed endpoint | Security Analyst | Security-first threat model |
+| "We tried 2+ fixes and still do not understand the system behavior" | Architect | Fresh systems-level diagnosis |
+| "Implement the approved design" | Architect or domain owner from prior step | Preserve design continuity |
+| "Fix issues found during review" | Same reviewer in Implementation Mode | Keeps context and accountability |
+
+## Routing Boundaries
+
+Choose the **Code Reviewer** when the primary goal is:
+
+- correctness
+- regressions
+- maintainability
+- performance
+- broad review of a change
+
+Choose the **Security Analyst** when the primary goal is:
+
+- threat modeling
+- authn/authz review
+- secret handling
+- input validation on untrusted boundaries
+- attack surface reduction
+- security hardening before release
+
+If both are important, use this rule:
+
+- Broad change review with some security relevance: start with Code Reviewer
+- Security-sensitive feature where correctness also matters: start with Security Analyst
+- High-risk changes touching auth, permissions, payments, PII, admin actions, or public endpoints: run both
+
+## Multi-Agent Patterns
+
+Default to a single specialist. Use multiple specialists only when each one answers a distinct question.
+
+### Sequential Delegation
+
+Use sequential delegation when one step produces the input for the next:
+
+1. Scope Analyst -> clarify request and risks
+2. Plan Reviewer -> validate the resulting plan
+3. Architect -> design or implement the approved approach
+
+Other good sequential patterns:
+
+1. Code Reviewer -> identify issues
+2. Security Analyst -> deepen security findings if the change is sensitive
+3. Same reviewer in Implementation Mode -> apply targeted fixes
+
+### Parallel Delegation
+
+Use parallel delegation only when the questions are independent and the result from one is not required to ask the other.
+
+Good candidates for parallel work:
+
+- Code Reviewer + Security Analyst on a sensitive PR
+- Architect + Security Analyst on a new external-facing design
+- Scope Analyst + Architect when the request has both product ambiguity and major technical tradeoffs
+
+Do not run in parallel when:
+
+- the request is small enough for one specialist
+- the second specialist depends on the first specialist's output
+- you are likely to get duplicate feedback without a clear division of responsibility
+
+### Parallel Task Framing
+
+When delegating in parallel, give each sub-agent an explicit angle:
+
+- Code Reviewer: correctness, regression risk, maintainability
+- Security Analyst: attack surface, authz boundaries, input handling
+- Architect: system shape, coupling, migration path
+- Scope Analyst: ambiguity, missing requirements, hidden constraints
+- Plan Reviewer: plan clarity, verification, missing references
+
+In synthesis, merge overlapping findings and remove duplicates. Do not present the user with two separate unfiltered reports.
 
 ## Delegation Flow
 
-### Step 1: Identify Expert
+### Step 1: Choose the Sub-Agent
 
-Match the task to the appropriate expert from the trigger tables above.
+Select the best specialist from the routing tables above.
 
-### Step 2: Read Expert Prompt
+Before choosing, answer these three questions:
 
-**CRITICAL**: Read the expert's prompt file relative to this skill's directory:
+1. Is the core uncertainty about requirements, design, review quality, or security?
+2. Do I need one answer first before I can ask the next question?
+3. Will a second specialist produce genuinely different signal?
 
-```
-Read experts/[expert-name].md
-```
+If the answer to question 3 is "no", use a single specialist.
 
-This content will be prepended to the delegation prompt as the expert's system instructions.
+### Step 2: Read the Sub-Agent Prompt
 
-### Step 3: Determine Mode
+Read the prompt file from `../../agents/[agent-name].md`.
+
+Always inject the full sub-agent prompt into the Codex request.
+
+### Step 3: Determine Execution Mode
 
 | Task Type | Mode | Sandbox |
 |-----------|------|---------|
 | Analysis, review, recommendations | Advisory | `read-only` |
 | Make changes, fix issues, implement | Implementation | `workspace-write` |
 
-The mode is determined by the **task**, not the expert. Any expert can advise or implement.
+Mode is determined by the task, not by the sub-agent.
 
-### Step 4: Notify User
+### Step 4: Notify the User
 
-Always inform the user before delegating:
+Before delegating, tell the user:
+
+```text
+Delegating to [Sub-agent Name]: [brief task summary]
 ```
-Delegating to [Expert Name]: [brief task summary]
-```
 
-### Step 5: Build Delegation Prompt
+### Step 5: Build the Task Packet
 
-Combine the expert prompt (from Step 2) with a task prompt that follows the **7-section format**:
+Use this 7-section structure:
 
-```
-[Expert prompt content from experts/*.md]
+```text
+[Sub-agent prompt content]
 
 ---
 
@@ -119,11 +227,11 @@ OUTPUT FORMAT:
 - [How to structure response]
 ```
 
-Include FULL context -- relevant code, file paths, previous attempts, error messages. One well-structured delegation beats multiple vague ones.
+Include concrete file paths, previous attempts, errors, and any local conventions. One complete delegation is better than multiple vague ones.
 
-### Step 6: Call Codex
+### Step 6: Call Codex CLI
 
-Run via `codex exec` CLI:
+Use `codex exec`:
 
 ```bash
 codex exec --skip-git-repo-check \
@@ -134,234 +242,62 @@ codex exec --skip-git-repo-check \
 ```
 
 Rules:
+
 - Always use `--skip-git-repo-check`
-- Always append `2>/dev/null` to suppress thinking tokens (stderr)
+- Always append `2>/dev/null` to suppress thinking tokens
 - For `workspace-write`, always include `--full-auto`
 - For `read-only`, `--full-auto` is optional
 
-### Step 7: Synthesize Response
+### Step 7: Synthesize the Result
 
-1. **Never show raw output** -- interpret and summarize for the user
-2. **Extract key insights** -- recommendations, issues, changes made
-3. **Apply your own judgment** -- experts can be wrong; evaluate critically
-4. **For implementation mode** -- verify the changes actually work
+1. Never paste raw model output to the user
+2. Extract the important findings, recommendations, or changes
+3. Apply your own judgment and challenge weak conclusions
+4. For implementation mode, verify the claimed changes
+5. If multiple specialists were used, reconcile conflicts and produce one clear recommendation
 
----
+## Resume and Retry
 
-## Multi-Turn Sessions (Resume)
-
-Codex CLI supports resuming the last session to continue with full context preservation.
-
-### When to Use Resume
-
-- Chained implementation steps (implement, then test, then refine)
-- Retry after failure (expert remembers what was tried)
-- Iterative refinement (review, revise, re-review)
-
-### Resume Syntax
+Use resume when the same delegated thread needs another iteration:
 
 ```bash
 echo "<follow-up prompt>" | codex exec --skip-git-repo-check resume --last 2>/dev/null
 ```
 
-- Do **not** add config flags when resuming -- the session inherits them from the original
-- All flags must go between `exec` and `resume`
+Use it for:
 
-### Retry Flow
+- chained implementation
+- retry after a failed verification
+- iterative refinement on the same context
 
-```
-Attempt 1 (codex exec) -> Verify -> [Fail]
-     |
-Attempt 2 (resume with error details) -> Verify -> [Fail]
-     |
-Attempt 3 (resume with full error history) -> Verify -> [Fail]
-     |
+Retry flow:
+
+```text
+Attempt 1 -> Verify -> Fail
+Attempt 2 via resume with concrete failure details -> Verify -> Fail
+Attempt 3 via resume with full attempt history -> Verify -> Fail
 Escalate to user
 ```
 
----
+## Critical Evaluation
 
-## CLI Reference
+Treat Codex like a colleague, not an authority.
 
-### New Session
+- Trust your own knowledge when you have strong evidence
+- Verify disagreements with docs or web search when needed
+- Be alert to stale assumptions about tools, APIs, or versions
+- Push back on overconfident but weak recommendations
 
-```bash
-codex exec --skip-git-repo-check \
-  -m <model> \
-  --config model_reasoning_effort="<xhigh|high|medium|low>" \
-  --sandbox <read-only|workspace-write|danger-full-access> \
-  --full-auto \
-  -C "<directory>" \
-  "<prompt>" 2>/dev/null
-```
-
-### Quick Reference
-
-| Use case | Command |
-|----------|---------|
-| Read-only analysis | `codex exec --skip-git-repo-check --sandbox read-only "<prompt>" 2>/dev/null` |
-| Write changes | `codex exec --skip-git-repo-check --sandbox workspace-write --full-auto "<prompt>" 2>/dev/null` |
-| Full access | `codex exec --skip-git-repo-check --sandbox danger-full-access --full-auto "<prompt>" 2>/dev/null` |
-| Resume session | `echo "<prompt>" \| codex exec --skip-git-repo-check resume --last 2>/dev/null` |
-
-### Available Flags
-
-| Flag | Description |
-|------|-------------|
-| `-m, --model <MODEL>` | Model to use (e.g. `gpt-5.4`, `gpt-5.3-codex`) |
-| `--config key="value"` | Override config.toml settings per-call |
-| `--sandbox <mode>` | `read-only`, `workspace-write`, `danger-full-access` |
-| `--full-auto` | Auto-approve tool calls (required for write modes) |
-| `-C, --cd <DIR>` | Working directory |
-| `--skip-git-repo-check` | Skip git repo validation (always use) |
-
----
-
-## Expert-Specific Prompt Templates
-
-### Architect
-
-```
-TASK: [Analyze/Design/Implement] [specific system/component] for [goal].
-EXPECTED OUTCOME: [Clear recommendation OR working implementation]
-CONTEXT:
-- Current architecture: [description]
-- Relevant code: [file paths or snippets]
-- Problem/Goal: [what needs to be solved]
-CONSTRAINTS:
-- Must work with [existing systems]
-- Cannot change [protected components]
-MUST DO:
-- [Specific requirement]
-- Provide effort estimate (Quick/Short/Medium/Large)
-MUST NOT DO:
-- Over-engineer for hypothetical future needs
-- Introduce new dependencies without justification
-OUTPUT FORMAT:
-Advisory: Bottom line -> Action plan -> Effort estimate
-Implementation: Summary -> Files modified -> Verification
-```
-
-### Plan Reviewer
-
-```
-TASK: Review [plan name/description] for completeness and clarity.
-EXPECTED OUTCOME: APPROVE/REJECT verdict with specific feedback.
-CONTEXT:
-- Plan to review: [plan content]
-- Goals: [what the plan achieves]
-- Constraints: [timeline, resources, technical limits]
-MUST DO:
-- Evaluate all 4 criteria (Clarity, Verifiability, Completeness, Big Picture)
-- Simulate actually doing the work to find gaps
-- Provide specific improvements if rejecting
-MUST NOT DO:
-- Rubber-stamp without real analysis
-- Provide vague feedback
-- Approve plans with critical gaps
-OUTPUT FORMAT:
-[APPROVE / REJECT]
-Justification: [explanation]
-Summary: [4-criteria assessment]
-[If REJECT: Top 3-5 improvements needed]
-```
-
-### Code Reviewer
-
-```
-TASK: [Review / Review and fix] [code/PR/file] for [focus areas].
-EXPECTED OUTCOME: [Issue list with verdict OR fixed code]
-CONTEXT:
-- Code to review: [file paths or snippets]
-- Purpose: [what this code does]
-- Recent changes: [what changed]
-MUST DO:
-- Prioritize: Correctness -> Security -> Performance -> Maintainability
-- Focus on issues that matter, not style nitpicks
-MUST NOT DO:
-- Nitpick style (let formatters handle this)
-- Flag theoretical concerns unlikely to matter
-OUTPUT FORMAT:
-Advisory: Summary -> Critical issues -> Recommendations -> Verdict
-Implementation: Summary -> Issues fixed -> Files modified -> Verification
-```
-
-### Security Analyst
-
-```
-TASK: [Analyze / Harden] [system/code/endpoint] for security vulnerabilities.
-EXPECTED OUTCOME: [Vulnerability report OR hardened code]
-CONTEXT:
-- Code/system to analyze: [file paths, architecture description]
-- Assets at risk: [what's valuable]
-- Threat model: [who might attack, if known]
-MUST DO:
-- Check OWASP Top 10 categories
-- Consider authentication, authorization, input validation
-- Provide practical remediation, not theoretical concerns
-MUST NOT DO:
-- Flag low-risk theoretical issues
-- Provide vague "be more secure" advice
-OUTPUT FORMAT:
-Advisory: Threat summary -> Vulnerabilities -> Recommendations -> Risk rating
-Implementation: Summary -> Vulnerabilities fixed -> Files modified -> Verification
-```
-
-### Scope Analyst
-
-```
-TASK: Analyze [request/feature] before planning begins.
-EXPECTED OUTCOME: Clear understanding of scope, risks, and questions to resolve.
-CONTEXT:
-- Request: [what was asked for]
-- Current state: [what exists now]
-- Known constraints: [technical, business, timeline]
-MUST DO:
-- Classify intent (Refactoring/Build/Mid-sized/Architecture/Bug Fix/Research)
-- Identify hidden requirements and ambiguities
-- Surface questions that need answers before proceeding
-MUST NOT DO:
-- Start planning (that comes after analysis)
-- Make assumptions about unclear requirements
-OUTPUT FORMAT:
-Intent: [classification]
-Findings: [key discoveries]
-Questions: [what needs clarification]
-Risks: [with mitigations]
-Recommendation: [Proceed / Clarify First / Reconsider]
-```
-
----
-
-## Critical Evaluation of Codex Output
-
-Codex is powered by OpenAI models. Treat it as a **colleague, not an authority**.
-
-- **Trust your own knowledge** when confident. Push back if Codex is wrong.
-- **Research disagreements** via WebSearch or docs before accepting claims.
-- **Remember knowledge cutoffs** -- Codex may not know about recent changes.
-- **Evaluate critically** -- especially model names, library versions, API changes.
-
-### When Codex is Wrong
-
-1. State your disagreement clearly to the user
-2. Provide evidence (your knowledge, web search, docs)
-3. Optionally resume the session to discuss:
-   ```bash
-   echo "This is Claude following up. I disagree with [X] because [evidence]. What's your take?" | codex exec --skip-git-repo-check resume --last 2>/dev/null
-   ```
-4. Let the user decide if there's genuine ambiguity
-
----
+If a delegated result looks wrong, say so clearly, provide evidence, and optionally continue the same session with a corrective follow-up.
 
 ## Anti-Patterns
 
 | Don't | Do |
 |-------|-----|
 | Delegate trivial questions | Answer directly |
+| Keep specialist prompts inside the skill | Read the canonical prompt from `agents/` |
+| Fire multiple specialists without distinct roles | Give each specialist a unique review angle |
 | Show raw expert output | Synthesize and interpret |
-| Skip reading expert prompt file | ALWAYS read and inject into the prompt |
-| Skip user notification | ALWAYS notify before delegating |
-| Retry without error context | Include FULL history of what was tried |
-| Assume expert remembers across sessions | Use `resume --last` for multi-turn; include full context for new sessions |
-| Spam multiple vague delegations | One well-structured delegation with full context |
+| Skip user notification | Always notify before delegating |
+| Retry without full error context | Include complete failure history |
+| Assume context is preserved across new sessions | Use `resume --last` or resend context |

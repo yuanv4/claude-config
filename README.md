@@ -25,7 +25,7 @@ claude-config/
 │   └── xlsx/                 # 表格创建与分析
 ├── plugins/                  # 插件元数据（已安装插件追踪）
 ├── rules/                    # 规则文件
-├── agents/                   # 子代理定义
+├── agents/                   # 子代理定义（如 Codex 架构师、代码审查、安全审计）
 ├── commands/                 # 命令定义
 ├── sync.ps1                  # 同步脚本（拉取、对齐 ~/.claude、提交、推送）
 └── sync.bat                  # 以管理员权限运行 sync.ps1（需提权时使用）
@@ -53,6 +53,11 @@ claude-config/
 若需以管理员权限运行（如符号链接创建失败时），可双击 `sync.bat` 或在 CMD 中执行 `sync.bat`。
 
 > 注意：脚本会对齐 `skills`、`agents`、`rules`、`commands`。
+
+目前 `skills/codex` 已重构为“技能入口 + 子代理定义”的混合架构：
+
+- `skills/codex/SKILL.md` 负责触发判断、角色路由、委派格式和结果汇总
+- `agents/*.md` 负责各个专家子代理的人设与输出约束
 
 > 扩展方式：在 `sync.ps1` 顶部修改 `$ManagedSyncRules`（同步哪些目录）和 `$SyncTargets`（同步到哪些根目录）。
 
