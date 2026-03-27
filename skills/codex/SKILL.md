@@ -7,19 +7,23 @@ description: Route tasks to Codex specialist sub-agents for architecture analysi
 
 > Adapted from [claude-delegator](https://github.com/jarrodwatts/claude-delegator) by [@jarrodwatts](https://github.com/jarrodwatts)
 
-Use this skill as the **entrypoint** for Codex delegation. The skill decides whether delegation is appropriate, selects the right specialist sub-agent, builds the task packet, runs Codex CLI, and synthesizes the result.
+Use this skill as the **entrypoint** for Codex delegation. The skill decides whether delegation is appropriate, selects the right specialist sub-agent, reads the specialist prompt from this skill's own `agents/` directory, builds the task packet, runs Codex CLI, and synthesizes the result.
 
-The specialist prompts now live in [`agents/`](../../agents), not inside this skill.
+Keep this skill self-contained:
+
+- Store the canonical specialist prompts in `skills/codex/agents/`
+- Resolve those prompt files relative to this `SKILL.md`
+- Use Codex CLI so the delegated worker runs on a Codex model
 
 ## Available Sub-Agents
 
 | Sub-agent | Specialty | Prompt File |
 |-----------|-----------|-------------|
-| **Architect** | System design, tradeoffs, complex debugging | `../../agents/architect.md` |
-| **Plan Reviewer** | Plan validation before execution | `../../agents/plan-reviewer.md` |
-| **Scope Analyst** | Pre-planning, catching ambiguities | `../../agents/scope-analyst.md` |
-| **Code Reviewer** | Code quality, bugs, security issues | `../../agents/code-reviewer.md` |
-| **Security Analyst** | Vulnerabilities, threat modeling | `../../agents/security-analyst.md` |
+| **Architect** | System design, tradeoffs, complex debugging | `agents/architect.md` |
+| **Plan Reviewer** | Plan validation before execution | `agents/plan-reviewer.md` |
+| **Scope Analyst** | Pre-planning, catching ambiguities | `agents/scope-analyst.md` |
+| **Code Reviewer** | Code quality, bugs, security issues | `agents/code-reviewer.md` |
+| **Security Analyst** | Vulnerabilities, threat modeling | `agents/security-analyst.md` |
 
 ## Responsibilities Split
 
@@ -171,9 +175,13 @@ If the answer to question 3 is "no", use a single specialist.
 
 ### Step 2: Read the Sub-Agent Prompt
 
-Read the prompt file from `../../agents/[agent-name].md`.
+Read the selected specialist prompt from this skill's local `agents/` directory.
 
-Always inject the full sub-agent prompt into the Codex request.
+- Treat the directory containing this `SKILL.md` as the base path
+- Resolve the selected prompt file from the table above relative to this skill
+- Do not rely on project-root-relative paths or external agent registries
+
+Always inject the full specialist prompt into the Codex CLI request so the delegated worker uses the intended role behavior.
 
 ### Step 3: Determine Execution Mode
 
@@ -231,7 +239,7 @@ Include concrete file paths, previous attempts, errors, and any local convention
 
 ### Step 6: Call Codex CLI
 
-Use `codex exec`:
+Use `codex exec` so the delegated worker runs on a Codex model:
 
 ```bash
 codex exec --skip-git-repo-check \
@@ -295,7 +303,7 @@ If a delegated result looks wrong, say so clearly, provide evidence, and optiona
 | Don't | Do |
 |-------|-----|
 | Delegate trivial questions | Answer directly |
-| Keep specialist prompts inside the skill | Read the canonical prompt from `agents/` |
+| Keep specialist prompts outside the skill | Read the canonical prompt from this skill's `agents/` directory |
 | Fire multiple specialists without distinct roles | Give each specialist a unique review angle |
 | Show raw expert output | Synthesize and interpret |
 | Skip user notification | Always notify before delegating |
