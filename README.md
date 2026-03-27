@@ -23,22 +23,12 @@ claude-config/
 │   ├── mobile-android-design/# Android Material Design
 │   ├── pdf/                  # PDF 处理
 │   └── xlsx/                 # 表格创建与分析
-├── plugins/                  # 插件元数据（已安装插件追踪）
 ├── rules/                    # 规则文件
 ├── agents/                   # 子代理定义（如 Codex 架构师、代码审查、安全审计）
 ├── commands/                 # 命令定义
 ├── sync.ps1                  # 同步脚本（拉取、对齐 ~/.claude、提交、推送）
 └── sync.bat                  # 以管理员权限运行 sync.ps1（需提权时使用）
 ```
-
-## 已安装插件
-
-通过 Claude Code 插件系统安装，元数据追踪于 `plugins/installed_plugins.json`：
-
-| 插件 | 来源 | 说明 |
-|------|------|------|
-| [claude-delegator](https://github.com/jarrodwatts/claude-delegator) | jarrodwatts | 将任务委托给 GPT / Gemini 专家（架构师、代码审查等） |
-| skill-creator | claude-plugins-official | 创建、修改、评测技能 |
 
 ## 配置管理
 
