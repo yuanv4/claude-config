@@ -239,20 +239,22 @@ Include concrete file paths, previous attempts, errors, and any local convention
 
 ### Step 6: Call Codex CLI
 
-Use `codex exec` so the delegated worker runs on a Codex model:
+Use `codex exec` so the delegated worker runs on a Codex model.
+
+Prefer passing the combined prompt through stdin. This is more robust than passing a large prompt as a positional argument, especially when the prompt begins with YAML frontmatter such as `---`.
 
 ```bash
-codex exec --skip-git-repo-check \
+printf '%s' "<combined prompt>" | codex exec --skip-git-repo-check \
   --sandbox <read-only|workspace-write> \
   --full-auto \
-  -C "<working directory>" \
-  "<combined prompt>" 2>/dev/null
+  --cd "<working directory>" 2>/dev/null
 ```
 
 Rules:
 
 - Always use `--skip-git-repo-check`
 - Always append `2>/dev/null` to suppress thinking tokens
+- Prefer stdin over positional prompt arguments for multi-line task packets
 - For `workspace-write`, always include `--full-auto`
 - For `read-only`, `--full-auto` is optional
 
@@ -269,7 +271,7 @@ Rules:
 Use resume when the same delegated thread needs another iteration:
 
 ```bash
-echo "<follow-up prompt>" | codex exec --skip-git-repo-check resume --last 2>/dev/null
+printf '%s' "<follow-up prompt>" | codex exec --skip-git-repo-check resume --last 2>/dev/null
 ```
 
 Use it for:
