@@ -237,16 +237,30 @@ OUTPUT FORMAT:
 
 Include concrete file paths, previous attempts, errors, and any local conventions. One complete delegation is better than multiple vague ones.
 
+For re-reviews after a REJECT, see the **Iterative Review Loop** section — the task packet format is different.
+
 ### Step 6: Call Codex CLI
 
 Use `codex exec` so the delegated worker runs on a Codex model.
 
-Prefer passing the combined prompt through stdin. This is more robust than passing a large prompt as a positional argument, especially when the prompt begins with YAML frontmatter such as `---`.
+Prefer reading the specialist prompt and any referenced file (e.g. a plan) into shell variables, then combining them with `printf`. This is more robust than passing a large prompt as a positional argument, especially when the prompt begins with YAML frontmatter such as `---`.
 
 ```bash
-printf '%s' "<combined prompt>" | codex exec --skip-git-repo-check \
+SPECIALIST=$(cat '<skill-dir>/agents/<specialist>.md')
+printf '%s\n\n---\n\nTASK: <one-sentence goal>\n\n...\n\nARTIFACT:\n\n%s' \
+  "$SPECIALIST" "$ARTIFACT" | codex exec --skip-git-repo-check \
   --sandbox <read-only|workspace-write> \
   --full-auto \
+  --cd "<working directory>" 2>/dev/null
+```
+
+When the reviewed artifact is a file on disk (e.g. a plan), load it into a variable:
+
+```bash
+SPECIALIST=$(cat '<skill-dir>/agents/plan-reviewer.md')
+PLAN=$(cat '<plan-file-path>')
+printf '%s\n\n---\n\nTASK: ...\n\nPLAN:\n\n%s' "$SPECIALIST" "$PLAN" | \
+  codex exec --skip-git-repo-check --sandbox read-only --full-auto \
   --cd "<working directory>" 2>/dev/null
 ```
 
@@ -254,9 +268,10 @@ Rules:
 
 - Always use `--skip-git-repo-check`
 - Always append `2>/dev/null` to suppress thinking tokens
-- Prefer stdin over positional prompt arguments for multi-line task packets
+- Read specialist prompt and artifact files into variables; combine with `printf`
 - For `workspace-write`, always include `--full-auto`
 - For `read-only`, `--full-auto` is optional
+- Use `run_in_background: true` for review tasks — plan reviews regularly take 60–120 seconds and will stall the main thread if not backgrounded
 
 ### Step 7: Synthesize the Result
 
@@ -288,6 +303,67 @@ Attempt 2 via resume with concrete failure details -> Verify -> Fail
 Attempt 3 via resume with full attempt history -> Verify -> Fail
 Escalate to user
 ```
+
+## Iterative Review Loop
+
+Use this pattern when the user asks to "review until approved" or when a REJECT verdict requires fixes before proceeding.
+
+### Loop Structure
+
+```text
+Round 1: Full task packet → REJECT
+  → Fix the artifact
+Round 2: Re-review packet (list fixes, skip resolved) → REJECT
+  → Fix again
+Round N: Re-review packet → APPROVE → proceed
+```
+
+Escalate to the user after 3 consecutive REJECTs without progress on the blocking issues.
+
+### Re-Review Task Packet
+
+The re-review packet differs from the first-review packet:
+
+- Open with a numbered list of what was fixed since the last REJECT
+- Shrink the MUST CHECK list to only the items that were previously flagged or are genuinely uncertain after the fix
+- Instruct Codex to skip already-resolved issues and only surface new or still-open blockers
+
+```text
+[Specialist prompt content]
+
+---
+
+TASK: Re-review [artifact name]. Previous verdict: REJECT.
+The following issues have been fixed:
+1. [Fix 1 description]
+2. [Fix 2 description]
+...
+
+EXPECTED OUTCOME: APPROVE or REJECT. If REJECT, list only remaining or newly discovered blocking issues. Do not re-raise issues that are already fixed.
+
+MUST CHECK:
+- [Issue from prior round that may still be open]
+- [Specific uncertainty introduced by the fix]
+
+ARTIFACT:
+
+[artifact content]
+```
+
+### Codex Call for Re-Review
+
+Load updated artifact fresh each round — it may have changed on disk:
+
+```bash
+SPECIALIST=$(cat '<skill-dir>/agents/plan-reviewer.md')
+PLAN=$(cat '<plan-file-path>')
+printf '%s\n\n---\n\nTASK: Re-review (round N)...\n\nPLAN:\n\n%s' \
+  "$SPECIALIST" "$PLAN" | codex exec --skip-git-repo-check \
+  --sandbox read-only --full-auto \
+  --cd "<working directory>" 2>/dev/null
+```
+
+Always run re-reviews in background (`run_in_background: true`). While waiting, do not self-review; wait for the Codex result and synthesize from it.
 
 ## Critical Evaluation
 
