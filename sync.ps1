@@ -34,6 +34,7 @@ function Show-Help {
   Write-Host "  .\sync.ps1         默认执行 sync"
   Write-Host ""
   Write-Host "说明:"
+  Write-Host "  仓库根 settings.json 会同步到 ~/.claude/settings.json。"
   Write-Host "  同步规则可在脚本顶部的 `$ManagedSyncRules / `$SyncTargets 中增删。"
 }
 
@@ -162,6 +163,11 @@ function Apply-ConfigSyncToTarget {
 
   New-Item -ItemType Directory -Path $rootDir -Force | Out-Null
 
+  $repoSettings = Join-Path $ConfigDir "settings.json"
+  if (Test-Path -LiteralPath $repoSettings) {
+    Ensure-SymbolicLink $repoSettings (Join-Path $rootDir "settings.json") "settings.json"
+  }
+
   foreach ($rule in $ManagedSyncRules) {
     $protected = @()
     if ($Target.ProtectedNames -and $Target.ProtectedNames.ContainsKey($rule.TargetPath)) {
@@ -173,12 +179,6 @@ function Apply-ConfigSyncToTarget {
       $rule.Kind `
       $protected
   }
-
-  $repoSettings = Join-Path $ConfigDir "settings.local.json"
-  if (Test-Path -LiteralPath $repoSettings) {
-    Ensure-SymbolicLink $repoSettings (Join-Path $rootDir "settings.local.json") "settings.local.json"
-  }
-
 }
 
 function Apply-ConfigSync {
