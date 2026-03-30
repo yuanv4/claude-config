@@ -15,7 +15,6 @@ cd claude-config
 ```
 claude-config/
 ├── skills/                   # 技能（子目录含 SKILL.md）
-│   ├── claudemd/             # CLAUDE.md 初始化与维护
 │   ├── docx/                 # Word 文档创建与编辑
 │   ├── docx-to-md-polisher/  # DOCX 转 Markdown 清理
 │   ├── find-skills/          # 技能发现与安装
@@ -42,7 +41,7 @@ claude-config/
 
 若需以管理员权限运行（如符号链接创建失败时），可双击 `sync.bat` 或在 CMD 中执行 `sync.bat`。
 
-> 注意：脚本会对齐 `skills`、`agents`、`rules`、`commands`。
+> 注意：脚本会对齐仓库根 `settings.json` 以及 `skills`、`agents`、`rules`、`commands`。
 
 目前 `skills/codex` 已重构为“技能入口 + 子代理定义”的混合架构：
 
