@@ -32,7 +32,20 @@
     "skill-creator@claude-plugins-official": true,
     "codex@openai-codex": true
   },
-  "extraKnownMarketplaces": {},
+  "extraKnownMarketplaces": {
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      }
+    },
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    }
+  },
   "effortLevel": "medium",
   "autoUpdatesChannel": "latest"
 }

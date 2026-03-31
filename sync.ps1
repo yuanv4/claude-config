@@ -32,7 +32,7 @@ $ManagedPlugins = @(
     Scope = "user"
   }
   @{
-    MarketplaceSource = $null
+    MarketplaceSource = "anthropics/claude-plugins-official"
     PluginRef = "skill-creator@claude-plugins-official"
     Scope = "user"
   }

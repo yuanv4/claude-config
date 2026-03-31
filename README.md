@@ -50,6 +50,11 @@ claude-config/
 - `skill-creator@claude-plugins-official`
 - `codex@openai-codex`
 
+并显式登记以下 marketplaces：
+
+- `anthropics/claude-plugins-official`
+- `openai/codex-plugin-cc`
+
 `codex@openai-codex` 来自 `openai/codex-plugin-cc` marketplace。首次使用前请在 Claude Code 中运行：
 
 ```text
