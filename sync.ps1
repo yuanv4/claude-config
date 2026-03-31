@@ -25,17 +25,97 @@ $SyncTargets = @(
   }
 )
 
+$ManagedPlugins = @(
+  @{
+    MarketplaceSource = "openai/codex-plugin-cc"
+    PluginRef = "codex@openai-codex"
+    Scope = "user"
+  }
+  @{
+    MarketplaceSource = $null
+    PluginRef = "skill-creator@claude-plugins-official"
+    Scope = "user"
+  }
+)
+
 function Show-Help {
   Write-Host "Claude 配置同步（仓库完全同步版）"
   Write-Host "======================================"
   Write-Host ""
   Write-Host "用法:"
-  Write-Host "  .\sync.ps1 sync    拉取远程、对齐 ~/.claude、提交并推送"
+  Write-Host "  .\sync.ps1 sync    拉取远程、对齐 ~/.claude、安装插件、提交并推送"
   Write-Host "  .\sync.ps1         默认执行 sync"
   Write-Host ""
   Write-Host "说明:"
-  Write-Host "  仓库根 settings.json 会同步到 ~/.claude/settings.json。"
-  Write-Host "  同步规则可在脚本顶部的 `$ManagedSyncRules / `$SyncTargets 中增删。"
+  Write-Host "  仓库根 settings.json 会同步到 ~/.claude/settings.json，并确保托管插件已安装。"
+  Write-Host "  同步规则可在脚本顶部的 `$ManagedSyncRules / `$SyncTargets / `$ManagedPlugins 中增删。"
+}
+
+function Invoke-ClaudeCli {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]]$Arguments
+  )
+
+  $command = Get-Command "claude" -ErrorAction SilentlyContinue
+  if (-not $command) {
+    throw "未找到 claude 命令，请先安装 Claude Code CLI。"
+  }
+
+  $output = & $command.Source @Arguments 2>&1
+  $exitCode = $LASTEXITCODE
+
+  if ($output) {
+    $output | ForEach-Object { Write-Host $_ }
+  }
+
+  if ($exitCode -ne 0) {
+    $argText = ($Arguments -join " ")
+    throw "claude $argText 执行失败，退出码: $exitCode"
+  }
+
+  return $output
+}
+
+function Ensure-ClaudePluginInstalled {
+  param(
+    [string]$MarketplaceSource,
+    [Parameter(Mandatory = $true)]
+    [string]$PluginRef,
+    [string]$Scope = "user"
+  )
+
+  if ($MarketplaceSource) {
+    Write-Host "检查 marketplace: $MarketplaceSource"
+    try {
+      Invoke-ClaudeCli @("plugin", "marketplace", "add", $MarketplaceSource)
+    } catch {
+      $message = $_.Exception.Message
+      if ($message -notmatch "already exists|already added|already configured|duplicate") {
+        throw
+      }
+    }
+  }
+
+  Write-Host "检查 plugin: $PluginRef"
+  try {
+    Invoke-ClaudeCli @("plugin", "install", $PluginRef, "--scope", $Scope)
+  } catch {
+    $message = $_.Exception.Message
+    if ($message -notmatch "already installed|already enabled|already exists") {
+      throw
+    }
+  }
+}
+
+function Ensure-ManagedPlugins {
+  foreach ($plugin in $ManagedPlugins) {
+    Ensure-ClaudePluginInstalled `
+      $plugin.MarketplaceSource `
+      $plugin.PluginRef `
+      $plugin.Scope
+    Write-Host ""
+  }
 }
 
 function Test-IsLink {
@@ -200,6 +280,9 @@ function Sync-Changes {
 
     Write-Host ""
     Apply-ConfigSync
+
+    Write-Host ""
+    Ensure-ManagedPlugins
 
     $status = & git status --porcelain
     if (-not $status) {

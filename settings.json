@@ -6,7 +6,6 @@
       "Grep",
       "WebFetch",
       "WebSearch",
-
       "Bash(git log:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
@@ -16,7 +15,6 @@
       "Bash(git stash:*)",
       "Bash(git tag:*)",
       "Bash(git config:*)",
-
       "Bash(ls:*)",
       "Bash(pwd)",
       "Bash(echo:*)",
@@ -27,13 +25,12 @@
       "Bash(which:*)",
       "Bash(type:*)",
       "Bash(uname:*)",
-      "Bash(env)",
-
-      "Bash(codex exec:*)"
+      "Bash(env)"
     ]
   },
   "enabledPlugins": {
-    "skill-creator@claude-plugins-official": true
+    "skill-creator@claude-plugins-official": true,
+    "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {},
   "effortLevel": "medium",

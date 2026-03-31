@@ -23,16 +23,16 @@ claude-config/
 │   ├── pdf/                  # PDF 处理
 │   └── xlsx/                 # 表格创建与分析
 ├── rules/                    # 规则文件
-├── agents/                   # 子代理定义（如 Codex 架构师、代码审查、安全审计）
+├── agents/                   # 子代理定义
 ├── commands/                 # 命令定义
-├── sync.ps1                  # 同步脚本（拉取、对齐 ~/.claude、提交、推送）
+├── sync.ps1                  # 同步脚本（拉取、对齐 ~/.claude、安装插件、提交、推送）
 └── sync.bat                  # 以管理员权限运行 sync.ps1（需提权时使用）
 ```
 
 ## 配置管理
 
 ```powershell
-# 完整同步：拉取远程 -> 对齐 ~/.claude -> 提交并推送（如有变更）
+# 完整同步：拉取远程 -> 对齐 ~/.claude -> 安装托管插件 -> 提交并推送（如有变更）
 .\sync.ps1 sync
 
 # 不带参数等同于 sync
@@ -41,14 +41,28 @@ claude-config/
 
 若需以管理员权限运行（如符号链接创建失败时），可双击 `sync.bat` 或在 CMD 中执行 `sync.bat`。
 
-> 注意：脚本会对齐仓库根 `settings.json` 以及 `skills`、`agents`、`rules`、`commands`。
+> 注意：脚本会对齐仓库根 `settings.json` 以及 `skills`、`agents`、`rules`、`commands`，并显式安装托管插件。
 
-目前 `skills/codex` 已重构为“技能入口 + 子代理定义”的混合架构：
+## 托管插件
 
-- `skills/codex/SKILL.md` 负责触发判断、角色路由、委派格式和结果汇总
-- `agents/*.md` 负责各个专家子代理的人设与输出约束
+当前同步脚本会显式确保以下插件已安装：
 
-> 扩展方式：在 `sync.ps1` 顶部修改 `$ManagedSyncRules`（同步哪些目录）和 `$SyncTargets`（同步到哪些根目录）。
+- `skill-creator@claude-plugins-official`
+- `codex@openai-codex`
+
+`codex@openai-codex` 来自 `openai/codex-plugin-cc` marketplace。首次使用前请在 Claude Code 中运行：
+
+```text
+/codex:setup
+```
+
+如果本机尚未安装 Codex CLI，按提示安装，或手动执行：
+
+```powershell
+npm install -g @openai/codex
+```
+
+> 扩展方式：在 `sync.ps1` 顶部修改 `$ManagedSyncRules`（同步哪些目录）、`$SyncTargets`（同步到哪些根目录）和 `$ManagedPlugins`（显式安装哪些插件）。
 
 ## 参考
 
