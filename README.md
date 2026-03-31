@@ -14,17 +14,9 @@ cd claude-config
 
 ```
 claude-config/
-├── skills/                   # 技能（子目录含 SKILL.md）
-│   ├── docx/                 # Word 文档创建与编辑
-│   ├── docx-to-md-polisher/  # DOCX 转 Markdown 清理
-│   ├── find-skills/          # 技能发现与安装
-│   ├── frontend-design/      # 前端界面设计
-│   ├── mobile-android-design/# Android Material Design
-│   ├── pdf/                  # PDF 处理
-│   └── xlsx/                 # 表格创建与分析
+├── claude-plugins/           # 独立 Claude Code plugin marketplace 骨架
+│   └── plugins/yuanv4-workbench/ # 承载 skills / agents / commands 的个人插件
 ├── rules/                    # 规则文件
-├── agents/                   # 子代理定义
-├── commands/                 # 命令定义
 ├── sync.ps1                  # 同步脚本（拉取、对齐 ~/.claude、安装插件、提交、推送）
 └── sync.bat                  # 以管理员权限运行 sync.ps1（需提权时使用）
 ```
@@ -41,17 +33,19 @@ claude-config/
 
 若需以管理员权限运行（如符号链接创建失败时），可双击 `sync.bat` 或在 CMD 中执行 `sync.bat`。
 
-> 注意：脚本会对齐仓库根 `settings.json` 以及 `skills`、`agents`、`rules`、`commands`，并显式安装托管插件。
+> 注意：脚本现在只对齐仓库根 `settings.json` 与 `rules`，并显式安装托管插件；`skills`、`agents`、`commands` 已整体迁移到 `yuanv4/yuanv4-plugin-cc`，通过 `yuanv4-workbench@yuanv-personal` 分发到各机器。
 
 ## 托管插件
 
 当前同步脚本会显式确保以下插件已安装：
 
+- `yuanv4-workbench@yuanv-personal`（来自 GitHub marketplace `yuanv4/yuanv4-plugin-cc`）
 - `skill-creator@claude-plugins-official`
 - `codex@openai-codex`
 
 并显式登记以下 marketplaces：
 
+- `yuanv4/yuanv4-plugin-cc`
 - `anthropics/claude-plugins-official`
 - `openai/codex-plugin-cc`
 
@@ -67,7 +61,7 @@ claude-config/
 npm install -g @openai/codex
 ```
 
-> 扩展方式：在 `sync.ps1` 顶部修改 `$ManagedSyncRules`（同步哪些目录）、`$SyncTargets`（同步到哪些根目录）和 `$ManagedPlugins`（显式安装哪些插件）。
+> 扩展方式：在 `sync.ps1` 顶部修改 `$ManagedSyncRules`（同步哪些宿主目录）、`$SyncTargets`（同步到哪些根目录）和 `$ManagedPlugins`（显式安装哪些插件）。
 
 ## 参考
 

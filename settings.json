@@ -29,10 +29,17 @@
     ]
   },
   "enabledPlugins": {
+    "yuanv4-workbench@yuanv-personal": true,
     "skill-creator@claude-plugins-official": true,
     "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {
+    "yuanv-personal": {
+      "source": {
+        "source": "github",
+        "repo": "yuanv4/yuanv4-plugin-cc"
+      }
+    },
     "openai-codex": {
       "source": {
         "source": "github",

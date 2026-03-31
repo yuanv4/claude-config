@@ -8,10 +8,7 @@ $ConfigDir = $PSScriptRoot
 
 # Central sync rules: add/remove entries here to control what gets synced.
 $ManagedSyncRules = @(
-  @{ RepoPath = "skills";   TargetPath = "skills";   Kind = "dir"  }
-  @{ RepoPath = "agents";   TargetPath = "agents";   Kind = "file" }
   @{ RepoPath = "rules";    TargetPath = "rules";    Kind = "file" }
-  @{ RepoPath = "commands"; TargetPath = "commands"; Kind = "file" }
 )
 
 # Target profiles: add/remove profiles here.
@@ -26,6 +23,11 @@ $SyncTargets = @(
 )
 
 $ManagedPlugins = @(
+  @{
+    MarketplaceSource = "yuanv4/yuanv4-plugin-cc"
+    PluginRef = "yuanv4-workbench@yuanv-personal"
+    Scope = "user"
+  }
   @{
     MarketplaceSource = "openai/codex-plugin-cc"
     PluginRef = "codex@openai-codex"
@@ -48,6 +50,7 @@ function Show-Help {
   Write-Host ""
   Write-Host "说明:"
   Write-Host "  仓库根 settings.json 会同步到 ~/.claude/settings.json，并确保托管插件已安装。"
+  Write-Host "  内置个人 marketplace 来源为 yuanv4/yuanv4-plugin-cc，会安装 yuanv4-workbench@yuanv-personal。"
   Write-Host "  同步规则可在脚本顶部的 `$ManagedSyncRules / `$SyncTargets / `$ManagedPlugins 中增删。"
 }
 
